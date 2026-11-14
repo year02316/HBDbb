@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff4df">
+  <title>Stego &amp; Snail — Pixel Maze</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #342b4b;
+      --pink: #f27b91;
+      --cream: #fff4df;
+      --grass: #b6df91;
+      --grass-dark: #79b96c;
+      --tile: 32px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; overflow-x: hidden; color: var(--ink);
+      background: var(--cream); font-family: "Courier New", monospace;
+      image-rendering: pixelated;
+    }
+    button { font: inherit; color: inherit; }
+    .page { min-height: 100vh; position: relative; isolation: isolate; overflow: hidden; }
+    .hearts { position: absolute; inset: 0; overflow: hidden; z-index: -1; pointer-events: none; }
+    .heart {
+      --size: 16px; --duration: 12s; --drift: 35px;
+      position: absolute; bottom: -40px; left: var(--left); width: var(--size); height: var(--size);
+      background: #f27b91; opacity: .48; transform: rotate(45deg);
+      animation: float-up var(--duration) linear infinite; animation-delay: var(--delay);
+      image-rendering: pixelated;
+    }
+    .heart::before, .heart::after { content: ""; position: absolute; width: 100%; height: 100%; background: inherit; }
+    .heart::before { top: -50%; left: 0; }
+    .heart::after { top: 0; left: -50%; }
+    @keyframes float-up {
+      0% { translate: 0 0; rotate: 0deg; opacity: 0; }
+      12% { opacity: .5; }
+      85% { opacity: .42; }
+      100% { translate: var(--drift) -115vh; rotate: 25deg; opacity: 0; }
+    }
+    main { width: min(940px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 48px; }
+    header { text-align: center; margin-bottom: 20px; }
+    .eyebrow { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #806b82; font-weight: bold; }
+    h1 { margin: 9px 0 5px; font-size: clamp(26px, 5vw, 48px); line-height: 1.1; text-shadow: 3px 3px 0 #f7bd83; }
+    .subtitle { margin: 0; color: #71647a; font-size: 14px; }
+    .game-shell {
+      background: #fffaf0; border: 4px solid var(--ink); padding: 12px;
+      box-shadow: 8px 8px 0 #d9a8b7, 0 0 0 4px #fffaf0;
+      max-width: 760px; margin: 24px auto 0;
+    }
+    .hud { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 2px 4px 11px; font-weight: bold; font-size: 13px; }
+    .hud .goal { color: #658c52; }
+    .badge { background: #fce1c3; border: 2px solid var(--ink); padding: 5px 8px; white-space: nowrap; }
+    .board-wrap { position: relative; padding: 8px; background: #d7edb5; border: 3px solid var(--ink); }
+    canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; }
+    .message { min-height: 25px; padding: 10px 3px 2px; text-align: center; font-size: 13px; font-weight: bold; }
+    .message.won { color: #598c50; }
+    .controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 4px 0; }
+    .help { font-size: 12px; line-height: 1.6; color: #71647a; }
+    .reset {
+      background: var(--pink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink);
+      padding: 8px 11px; font-weight: bold; cursor: pointer;
+    }
+    .reset:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+    .dpad { display: none; grid-template: repeat(2, 38px) / repeat(3, 42px); justify-content: center; gap: 4px; margin: 16px auto 3px; }
+    .dpad button { background: #fce1c3; border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); font-size: 19px; touch-action: manipulation; }
+    .dpad [data-dir="up"] { grid-area: 1 / 2; }
+    .dpad [data-dir="left"] { grid-area: 2 / 1; }
+    .dpad [data-dir="down"] { grid-area: 2 / 2; }
+    .dpad [data-dir="right"] { grid-area: 2 / 3; }
+    footer { text-align: center; margin-top: 21px; color: #8c7890; font-size: 11px; }
+    @media (max-width: 600px) {
+      main { padding-top: 25px; }
+      .game-shell { padding: 8px; }
+      .hud { font-size: 11px; }
+      .dpad { display: grid; }
+      .controls { align-items: flex-start; }
+      .help { max-width: 68%; }
+    }
+    @media (prefers-reduced-motion: reduce) { .heart { animation-duration: 30s; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hearts" id="hearts" aria-hidden="true"></div>
+    <main>
+      <header>
+        <div class="eyebrow">A tiny pixel adventure</div>
+        <h1>Stego &amp; Snail</h1>
+        <p class="subtitle">A little maze, a big prehistoric friendship.</p>
+      </header>
+      <section class="game-shell" aria-label="Stegosaurus and snail maze game">
+        <div class="hud">
+          <span class="badge">♥ <span id="steps">0</span> steps</span>
+          <span class="goal">Find your snail friend! →</span>
+          <span class="badge">LEVEL 01</span>
+        </div>
+        <div class="board-wrap"><canvas id="maze" aria-label="Maze game board"></canvas></div>
+        <div class="message" id="message" aria-live="polite">Use arrow keys or WASD to guide Stego through the maze.</div>
+        <div class="controls">
+          <div class="help">Move: <b>↑ ↓ ← →</b> or <b>W A S D</b><br>Reach the snail to win!</div>
+          <button class="reset" id="reset" type="button">↻ Restart</button>
+        </div>
+        <div class="dpad" aria-label="Touch controls">
+          <button data-dir="up" aria-label="Move up">▲</button>
+          <button data-dir="left" aria-label="Move left">◀</button>
+          <button data-dir="down" aria-label="Move down">▼</button>
+          <button data-dir="right" aria-label="Move right">▶</button>
+        </div>
+      </section>
+      <footer>Made for slow strolls and snail-paced adventures ✿</footer>
+    </main>
+  </div>
+  <script>
+    (() => {
+      const maze = [
+        "###############",
+        "#S....#.......#",
+        "#.##..#.#####.#",
+        "#....##.....#.#",
+        "####....###.#.#",
+        "#......#...#..#",
+        "#.####.#.###.##",
+        "#.#....#.....##",
+        "#.#.######.#..#",
+        "#...#......#..#",
+        "###.#.####...##",
+        "#.....#....#..#",
+        "#.#####.##.#..#",
+        "#...........G.#",
+        "###############"
+      ];
+      const canvas = document.getElementById('maze');
+      const ctx = canvas.getContext('2d');
+      const tile = 32;
+      canvas.width = maze[0].length * tile;
+      canvas.height = maze.length * tile;
+      let player = { x: 1, y: 1 }, steps = 0, won = false;
+      const start = { x: 1, y: 1 };
+      const goal = { x: 13, y: 13 };
+
+      // Draw the characters on a tiny pixel grid, then scale them without smoothing.
+      function drawSprite(x, y, pixels, palette) {
+        const size = 16, scale = 2;
+        pixels.forEach((row, py) => [...row].forEach((value, px) => {
+          if (value !== '.') { ctx.fillStyle = palette[value]; ctx.fillRect(x * tile + px * scale + 1, y * tile + py * scale + 1, scale, scale); }
+        }));
+      }
+      const stego = [
+        "......gg........", ".....gggg.......", "....gggggg......", "..gggggggggg....",
+        ".ggggggggggggg..", "ggggggggggggggg.", "ggggggggggggggg.", "ggggggggggggggg.",
+        ".ggggggggggggg..", "..ggggggggggg...", "...g..g..g......", "...g..g..g......",
+        "...g..g..g......", "..gg..gg..gg....", "..gg..gg..gg....", "................"
+      ];
+      const snail = [
+        ".......oo.......", "......oooo......", ".....oooooo.....", "....ooobooo.....",
+        "...ooooooo......", "..oooooooooo....", ".oooooooooooo...", "oooooooooooooo..",
+        "oooooooooooooo..", "..oooooooooo....", "....oooooo......", "....o....o......",
+        "....o....o......", "...oo....oo.....", "...oo....oo.....", "................"
+      ];
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        maze.forEach((row, y) => [...row].forEach((cell, x) => {
+          const px = x * tile, py = y * tile;
+          if (cell === '#') {
+            ctx.fillStyle = '#795a91'; ctx.fillRect(px, py, tile, tile);
+            ctx.fillStyle = '#9b78ad'; ctx.fillRect(px + 2, py + 2, tile - 4, 4);
+            ctx.fillStyle = '#634674'; ctx.fillRect(px + 2, py + 8, tile - 4, tile - 10);
+            ctx.fillStyle = '#b394bb'; ctx.fillRect(px + 5, py + 13, 3, 3); ctx.fillRect(px + 23, py + 23, 3, 3);
+            ctx.strokeStyle = '#342b4b'; ctx.lineWidth = 2; ctx.strokeRect(px + 1, py + 1, tile - 2, tile - 2);
+          } else {
+            ctx.fillStyle = '#b6df91'; ctx.fillRect(px, py, tile, tile);
+            ctx.fillStyle = ((x + y) % 3 === 0) ? '#c9e8a7' : '#a9d887';
+            ctx.fillRect(px + ((x * 7 + y * 3) % 24) + 3, py + ((x * 5 + y * 11) % 24) + 3, 3, 3);
+            ctx.fillStyle = '#8bc879'; ctx.fillRect(px + 4, py + 26, 4, 2);
+          }
+        }));
+        drawSprite(goal.x, goal.y, snail, { o: '#e9a45b', b: '#fff2d6' });
+        drawSprite(player.x, player.y, stego, { g: '#4e9e71' });
+      }
+      function move(dx, dy) {
+        if (won) return;
+        const nx = player.x + dx, ny = player.y + dy;
+        if (maze[ny]?.[nx] === '#') return;
+        player = { x: nx, y: ny }; steps++;
+        document.getElementById('steps').textContent = steps;
+        if (nx === goal.x && ny === goal.y) {
+          won = true;
+          const message = document.getElementById('message');
+          message.textContent = `You found your snail friend in ${steps} steps! ♥`;
+          message.classList.add('won');
+        }
+        draw();
+      }
+      const directions = {
+        ArrowUp: [0, -1], w: [0, -1], W: [0, -1],
+        ArrowDown: [0, 1], s: [0, 1], S: [0, 1],
+        ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0],
+        ArrowRight: [1, 0], d: [1, 0], D: [1, 0]
+      };
+      window.addEventListener('keydown', event => {
+        if (directions[event.key]) { event.preventDefault(); move(...directions[event.key]); }
+      });
+      document.querySelectorAll('.dpad button').forEach(button => button.addEventListener('click', () => {
+        const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+        move(...dirs[button.dataset.dir]);
+      }));
+      document.getElementById('reset').addEventListener('click', () => {
+        player = { ...start }; steps = 0; won = false;
+        document.getElementById('steps').textContent = '0';
+        const message = document.getElementById('message');
+        message.textContent = 'Use arrow keys or WASD to guide Stego through the maze.';
+        message.classList.remove('won'); draw();
+      });
+      draw();
+
+      // Random positions, sizes, drift, and timing make the pixel hearts feel organic.
+      const hearts = document.getElementById('hearts');
+      for (let i = 0; i < 18; i++) {
+        const heart = document.createElement('span');
+        heart.className = 'heart';
+        heart.style.setProperty('--left', `${Math.random() * 100}%`);
+        heart.style.setProperty('--size', `${10 + Math.random() * 13}px`);
+        heart.style.setProperty('--duration', `${10 + Math.random() * 13}s`);
+        heart.style.setProperty('--delay', `${-Math.random() * 22}s`);
+        heart.style.setProperty('--drift', `${-45 + Math.random() * 90}px`);
+        hearts.appendChild(heart);
+      }
+    })();
+  </script>
+</body>
+</html>
